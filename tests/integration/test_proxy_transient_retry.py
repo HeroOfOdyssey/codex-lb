@@ -733,16 +733,7 @@ async def test_stream_connect_phase_429_usage_limit_transparent_failover(async_c
 
     monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
 
-    payload = {
-        "model": "gpt-5.1",
-        "instructions": "describe the image",
-        "input": [
-            {"type": "compaction", "encrypted_content": "opaque-compacted-history"},
-            {"type": "input_image", "image_url": "data:image/png;base64,iVBORw0KGgo="},
-        ],
-        "prompt_cache_key": "cache_compacted_image_429",
-        "stream": True,
-    }
+    payload = {"model": "gpt-5.1", "instructions": "hi", "input": [], "stream": True}
     async with async_client.stream("POST", "/backend-api/codex/responses", json=payload) as resp:
         assert resp.status_code == 200
         lines = [line async for line in resp.aiter_lines() if line]
@@ -792,6 +783,60 @@ async def test_stream_compacted_input_429_usage_limit_transparent_failover(async
             {"type": "input_image", "image_url": "data:image/png;base64,iVBORw0KGgo="},
         ],
         "prompt_cache_key": "cache_compacted_image_429",
+        "stream": True,
+    }
+    async with async_client.stream("POST", "/backend-api/codex/responses", json=payload) as resp:
+        assert resp.status_code == 200
+        lines = [line async for line in resp.aiter_lines() if line]
+
+    events = _extract_events(lines)
+    completed = [e for e in events if e.get("type") == "response.completed"]
+    failed = [e for e in events if e.get("type") == "response.failed"]
+    assert len(completed) == 1
+    assert len(failed) == 0
+    assert len(seen_account_ids) == 2
+    assert seen_account_ids[0] != seen_account_ids[1]
+
+
+@pytest.mark.asyncio
+async def test_stream_compacted_input_first_event_usage_limit_transparent_failover(async_client, monkeypatch):
+    """A first-event quota rejection must not bind retained input to the rejected account."""
+    await _import_account(async_client, "acc_stream_event_limit_a", "streameventlimita@example.com")
+    await _import_account(async_client, "acc_stream_event_limit_b", "streameventlimitb@example.com")
+
+    seen_account_ids: list[str | None] = []
+    rejected_account_id: str | None = None
+
+    async def fake_stream(payload, headers, access_token, account_id, base_url=None, raise_for_status=False):
+        nonlocal rejected_account_id
+        seen_account_ids.append(account_id)
+        if rejected_account_id is None:
+            rejected_account_id = account_id
+            yield _sse_event(
+                {
+                    "type": "response.failed",
+                    "response": {
+                        "error": {
+                            "code": "usage_limit_reached",
+                            "message": "usage limit reached",
+                        },
+                    },
+                }
+            )
+            return
+        assert account_id != rejected_account_id
+        yield _success_sse_event("resp_stream_event_limit_ok")
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+
+    payload = {
+        "model": "gpt-5.1",
+        "instructions": "describe the image",
+        "input": [
+            {"type": "compaction", "encrypted_content": "opaque-compacted-history"},
+            {"type": "input_image", "image_url": "data:image/png;base64,iVBORw0KGgo="},
+        ],
+        "prompt_cache_key": "cache_compacted_image_event_limit",
         "stream": True,
     }
     async with async_client.stream("POST", "/backend-api/codex/responses", json=payload) as resp:
