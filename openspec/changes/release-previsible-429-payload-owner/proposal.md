@@ -27,6 +27,9 @@ bodies, which #2069 intentionally rejects.
   other hard account owners.
 - Add a routed regression using compacted input and prompt-cache affinity so
   the test exercises real account selection and failover.
+- Reconcile the standing dispatch-owner requirement and add explicit coverage
+  that encrypted reasoning ciphertext is forwarded unchanged during this
+  narrow cross-account failover.
 
 ## Capabilities
 
@@ -44,3 +47,9 @@ None.
 The change is limited to streaming Responses retry ownership after a
 pre-visible rate-limit or quota rejection. It adds no settings, schema,
 migration, dashboard, or frontend changes.
+
+Cross-account encrypted-reasoning acceptance is based on controlled upstream
+compatibility probes, not a documented portability or policy guarantee. The
+submission may be observable upstream and future behavior may change; this PR
+does not make retained ciphertext generally portable outside the classified
+pre-visible rejection exception.
