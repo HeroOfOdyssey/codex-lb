@@ -42,10 +42,11 @@ and remain required during selection. Other retryable errors, including stream
 idle timeouts, remain owner-establishing because their dispatch outcome is
 ambiguous.
 
-The routed regression uses compacted input because it is nonportable under the
-fresh-replay predicate and therefore enters pending dispatch-owner
-registration. A plain text request would be account-neutral and would not
-exercise the defect.
+The routed regressions use compacted input and encrypted reasoning because both
+are nonportable under the fresh-replay predicate and therefore enter pending
+dispatch-owner registration. A plain text request would be account-neutral and
+would not exercise the defect. The encrypted-reasoning case also asserts that
+the proxy forwards the exact ciphertext unchanged on the second account.
 
 ## Risks / Trade-offs
 
@@ -56,6 +57,12 @@ exercise the defect.
 - [Risk] The exception could weaken file or continuation pinning. Those owners
   are established independently of transient dispatch registration and remain
   covered by existing fail-closed tests.
+- [Risk] Cross-account ciphertext submission may be observable upstream or
+  cease to be accepted. Controlled probes show valid blobs accepted across
+  distinct subscription identities and modified blobs rejected, but upstream
+  does not document the cipher, account portability, or policy consequences.
+  The exception remains limited to classified pre-visible quota/rate-limit
+  rejection, and a future conservative opt-out can be considered separately.
 
 ## Migration Plan
 
@@ -64,4 +71,5 @@ condition.
 
 ## Open Questions
 
-None.
+- Should a future release offer a conservative policy that fails closed instead
+  of sending encrypted reasoning across subscription identities?
