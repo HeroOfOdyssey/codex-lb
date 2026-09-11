@@ -3,6 +3,8 @@
 - [x] 1.1 Define pre-visible rate-limit and quota rejection as
       non-owner-establishing for a pending transient dispatch owner
 - [x] 1.2 Preserve independently established hard account ownership
+- [x] 1.3 Reconcile the existing dispatch-owner requirement with the narrow
+      classified pre-visible rejection exception
 
 ## 2. Implementation
 
@@ -16,6 +18,8 @@
 - [x] 3.2 Preserve the account-neutral HTTP 429 regression as a separate control
 - [x] 3.3 Add deterministic first-event limit regression coverage
 - [x] 3.4 Run focused retry tests and relevant hard-owner controls
+- [x] 3.5 Add routed cross-account encrypted-reasoning coverage that asserts
+      ciphertext is forwarded unchanged
 
 ## 4. Validation
 
