@@ -226,7 +226,11 @@ compatibility evidence, not a documented cryptographic, account-portability, or
 policy guarantee. Cross-account submission may be observable upstream, and the
 behavior may change; the proxy therefore limits it to the existing classified
 pre-visible failover path rather than treating encrypted input as generally
-portable.
+portable. If the alternate account returns `invalid_encrypted_content`, the
+proxy writes a dedicated `cross_account_encrypted_reasoning_rejected` warning
+with request, source-account, target-account, trigger, and error-code
+provenance. It never logs the encrypted content; operators can search this
+event directly to detect an upstream portability change.
 
 Verified recovery installs a replacement body and updates owner state
 atomically. A canonical account-neutral replacement clears the owner and may

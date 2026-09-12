@@ -63,6 +63,10 @@ the proxy forwards the exact ciphertext unchanged on the second account.
   does not document the cipher, account portability, or policy consequences.
   The exception remains limited to classified pre-visible quota/rate-limit
   rejection, and a future conservative opt-out can be considered separately.
+  A dedicated warning identifies `invalid_encrypted_content` returned by the
+  alternate account after this exact failover, including source and target
+  account provenance but never ciphertext, so operators can detect a change in
+  upstream portability without reconstructing raw request logs.
 
 ## Migration Plan
 
