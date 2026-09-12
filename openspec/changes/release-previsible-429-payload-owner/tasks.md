@@ -10,6 +10,8 @@
 
 - [x] 2.1 Exempt classified pre-visible HTTP 429 and first-event failures from
       transient payload-owner registration
+- [x] 2.2 Emit a distinct, ciphertext-free diagnostic when the alternate
+      account rejects encrypted reasoning after classified limit failover
 
 ## 3. Tests
 
@@ -20,6 +22,8 @@
 - [x] 3.4 Run focused retry tests and relevant hard-owner controls
 - [x] 3.5 Add routed cross-account encrypted-reasoning coverage that asserts
       ciphertext is forwarded unchanged
+- [x] 3.6 Cover HTTP-status and first-event `invalid_encrypted_content`
+      diagnostics plus the no-failover negative control
 
 ## 4. Validation
 

@@ -6946,6 +6946,20 @@ existing dispatch owner.
   dispatch owner
 - **AND** the proxy MUST attempt dispatch on account B
 
+#### Scenario: Cross-account encrypted reasoning rejection has a failover diagnostic
+
+- **GIVEN** account A rejects encrypted reasoning with a classified pre-visible
+  rate-limit or quota failure while owner registration is pending
+- **AND** normal retry selection dispatches the unchanged reasoning ciphertext
+  on account B
+- **WHEN** account B returns `invalid_encrypted_content`
+- **THEN** the proxy emits one distinct warning diagnostic containing the
+  request identifier, source account A, target account B, failover trigger, and
+  upstream error code
+- **AND** the diagnostic does not contain the encrypted reasoning content
+- **AND** an `invalid_encrypted_content` response without that failover
+  provenance does not emit the cross-account diagnostic
+
 #### Scenario: Existing required owner remains fail-closed after a limit rejection
 
 - **GIVEN** a streaming Responses body has a file, previous-response,
