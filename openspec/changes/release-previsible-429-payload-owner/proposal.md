@@ -22,14 +22,19 @@ bodies, which #2069 intentionally rejects.
 ## What Changes
 
 - Treat a pre-visible rate-limit or quota rejection as non-owner-establishing
-  whether it arrives as an HTTP 429 or the first upstream stream event.
+  whether it arrives as an HTTP 429 or the first upstream stream event, only
+  when ciphertext is the body's sole account-scoped retained state.
 - Preserve independently established file, continuation, turn-state, and
-  other hard account owners.
+  other hard account owners, and keep unresolved non-ciphertext scoped state
+  bound to its first dispatch account.
 - Add a routed regression using compacted input and prompt-cache affinity so
   the test exercises real account selection and failover.
 - Reconcile the standing dispatch-owner requirement and add explicit coverage
   that encrypted reasoning ciphertext is forwarded unchanged during this
   narrow cross-account failover.
+- Emit a provenance-rich, ciphertext-free warning if the alternate account
+  returns a literal or observed encrypted-content rejection, without penalizing
+  that target account's health for the request-shaped rejection.
 
 ## Capabilities
 

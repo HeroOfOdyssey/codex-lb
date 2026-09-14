@@ -217,8 +217,12 @@ pre-visible Trusted Access or authentication failure, account B must never
 receive the retained ciphertext. One forced token refresh may replay the body
 on account A; permanent failure or owner unavailability fails closed. A
 classified pre-visible rate-limit or quota rejection is narrower: it does not
-establish the pending dispatch owner, so the exact unchanged ciphertext may be
-retried on account B when no independent owner exists.
+establish the pending dispatch owner only when ciphertext is the body's sole
+account-scoped retained state, so the exact unchanged ciphertext may be retried
+on account B when no independent owner exists. A file, container, vector-store,
+nonneutral URL, unknown retained item, or other non-ciphertext account-scoped
+reference keeps the body on account A even if its durable owner cannot be
+resolved.
 
 Controlled upstream probes have accepted valid encrypted reasoning across
 distinct subscription identities while rejecting modified ciphertext. That is
@@ -226,11 +230,14 @@ compatibility evidence, not a documented cryptographic, account-portability, or
 policy guarantee. Cross-account submission may be observable upstream, and the
 behavior may change; the proxy therefore limits it to the existing classified
 pre-visible failover path rather than treating encrypted input as generally
-portable. If the alternate account returns `invalid_encrypted_content`, the
-proxy writes a dedicated `cross_account_encrypted_reasoning_rejected` warning
-with request, source-account, target-account, trigger, and error-code
-provenance. It never logs the encrypted content; operators can search this
-event directly to detect an upstream portability change.
+portable. If the alternate account returns literal `invalid_encrypted_content`
+or the observed reasoning-decryption rejection shape for retained encrypted
+reasoning or compaction, the proxy writes a dedicated
+`cross_account_encrypted_content_rejected` warning with request,
+source-account, target-account, trigger, and error-code provenance. It never
+logs encrypted content; operators can search this event directly to detect an
+upstream portability change. The request-shaped rejection does not increment
+the target account's health error count.
 
 Verified recovery installs a replacement body and updates owner state
 atomically. A canonical account-neutral replacement clears the owner and may
