@@ -800,6 +800,40 @@ async def test_stream_compacted_input_429_usage_limit_transparent_failover(async
 
 
 @pytest.mark.asyncio
+async def test_stream_unresolved_file_reference_429_remains_on_first_dispatch_account(async_client, monkeypatch):
+    """An expired file pin still relies on transient payload ownership and must not cross accounts."""
+    await _import_account(async_client, "acc_stream_file_429_a", "streamfile429a@example.com")
+    await _import_account(async_client, "acc_stream_file_429_b", "streamfile429b@example.com")
+
+    seen_account_ids: list[str | None] = []
+
+    async def fake_stream(payload, headers, access_token, account_id, base_url=None, raise_for_status=False):
+        seen_account_ids.append(account_id)
+        raise ProxyResponseError(
+            429,
+            openai_error("usage_limit_reached", "usage limit reached"),
+            failure_phase="status",
+        )
+        yield  # pragma: no cover - retain the async-generator transport contract
+
+    monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
+
+    response = await async_client.post(
+        "/backend-api/codex/responses",
+        json={
+            "model": "gpt-5.1",
+            "input": [{"type": "input_file", "file_id": "file_expired_owner_pin"}],
+            "prompt_cache_key": "cache_expired_file_429",
+            "stream": True,
+        },
+    )
+
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "usage_limit_reached"
+    assert len(seen_account_ids) == 1
+
+
+@pytest.mark.asyncio
 async def test_stream_encrypted_reasoning_429_cross_account_failover_is_unchanged(async_client, monkeypatch):
     """A rejected pending owner may fail over without rewriting ciphertext."""
     await _import_account(async_client, "acc_stream_reasoning_429_a", "reasoning429a@example.com")
@@ -856,19 +890,28 @@ async def test_stream_encrypted_reasoning_429_cross_account_failover_is_unchange
     assert seen_ciphertexts == [encrypted_content, encrypted_content]
 
 
-@pytest.mark.parametrize("rejection_shape", ["status", "response_failed"])
+@pytest.mark.parametrize("encrypted_item_type", ["reasoning", "compaction"])
+@pytest.mark.parametrize("rejection_shape", ["status_observed", "response_failed_observed", "status_literal"])
 @pytest.mark.asyncio
-async def test_stream_cross_account_encrypted_reasoning_rejection_logs_failover_provenance(
-    async_client, monkeypatch, caplog, rejection_shape: str
+async def test_stream_cross_account_encrypted_content_rejection_logs_failover_provenance(
+    async_client, monkeypatch, caplog, encrypted_item_type: str, rejection_shape: str
 ):
     """An upstream portability reversal is attributable to the quota failover that exposed it."""
-    await _import_account(async_client, "acc_reasoning_diag_a", "reasoningdiaga@example.com")
-    await _import_account(async_client, "acc_reasoning_diag_b", "reasoningdiagb@example.com")
+    account_ids = {
+        "acc_reasoning_diag_a": await _import_account(
+            async_client, "acc_reasoning_diag_a", "reasoningdiaga@example.com"
+        ),
+        "acc_reasoning_diag_b": await _import_account(
+            async_client, "acc_reasoning_diag_b", "reasoningdiagb@example.com"
+        ),
+    }
 
     rejected_account_id: str | None = None
+    target_account_id: str | None = None
+    rejection_code = "invalid_encrypted_content" if rejection_shape == "status_literal" else "invalid_request_error"
 
     async def fake_stream(payload, headers, access_token, account_id, base_url=None, raise_for_status=False):
-        nonlocal rejected_account_id
+        nonlocal rejected_account_id, target_account_id
         if rejected_account_id is None:
             rejected_account_id = account_id
             raise ProxyResponseError(
@@ -877,10 +920,12 @@ async def test_stream_cross_account_encrypted_reasoning_rejection_logs_failover_
                 failure_phase="status",
             )
         assert account_id != rejected_account_id
-        if rejection_shape == "status":
+        target_account_id = account_id
+        rejection_message = "Reasoning content could not be decrypted"
+        if rejection_shape.startswith("status_"):
             raise ProxyResponseError(
                 400,
-                openai_error("invalid_encrypted_content", "Encrypted reasoning content is invalid"),
+                openai_error(rejection_code, rejection_message),
                 failure_phase="status",
             )
         yield _sse_event(
@@ -889,8 +934,8 @@ async def test_stream_cross_account_encrypted_reasoning_rejection_logs_failover_
                 "response": {
                     "id": "resp_reasoning_rejected",
                     "error": {
-                        "code": "invalid_encrypted_content",
-                        "message": "Encrypted reasoning content is invalid",
+                        "code": rejection_code,
+                        "message": rejection_message,
                     },
                 },
             }
@@ -899,37 +944,48 @@ async def test_stream_cross_account_encrypted_reasoning_rejection_logs_failover_
     monkeypatch.setattr(proxy_module, "core_stream_responses", fake_stream)
     caplog.set_level(logging.WARNING, logger="app.modules.proxy.service")
 
+    encrypted_item = {
+        "type": encrypted_item_type,
+        "encrypted_content": "opaque-authenticated-encrypted-reasoning",
+    }
+    if encrypted_item_type == "reasoning":
+        encrypted_item.update({"id": "rs_cross_account_rejected", "summary": []})
+
     response = await async_client.post(
         "/backend-api/codex/responses",
         json={
             "model": "gpt-5.1",
             "input": [
-                {
-                    "type": "reasoning",
-                    "id": "rs_cross_account_rejected",
-                    "summary": [],
-                    "encrypted_content": "opaque-authenticated-encrypted-reasoning",
-                },
+                encrypted_item,
                 {"role": "user", "content": "continue"},
             ],
             "stream": True,
         },
     )
 
-    assert response.status_code == (400 if rejection_shape == "status" else 200)
+    assert response.status_code == (400 if rejection_shape.startswith("status_") else 200)
     records = [
         record
         for record in caplog.records
-        if record.getMessage().startswith("cross_account_encrypted_reasoning_rejected ")
+        if record.getMessage().startswith("cross_account_encrypted_content_rejected ")
     ]
     assert len(records) == 1
     diagnostic = records[0].getMessage()
     assert f"source_account_id={rejected_account_id}" in diagnostic
-    assert "target_account_id=" in diagnostic
-    assert f"target_account_id={rejected_account_id}" not in diagnostic
+    assert f"target_account_id={target_account_id}" in diagnostic
     assert "failover_trigger=previsible_rate_limit_or_quota" in diagnostic
-    assert "upstream_code=invalid_encrypted_content" in diagnostic
+    assert f"upstream_code={rejection_code}" in diagnostic
     assert "opaque-authenticated-encrypted-reasoning" not in diagnostic
+    assert target_account_id is not None
+    async with SessionLocal() as session:
+        target_account = await session.get(Account, account_ids[target_account_id])
+        assert target_account is not None
+        assert target_account.status == AccountStatus.ACTIVE
+    from app.dependencies import get_proxy_service_for_app
+
+    service = get_proxy_service_for_app(async_client._transport.app)
+    target_runtime = service._load_balancer._runtime.get(account_ids[target_account_id])
+    assert target_runtime is None or target_runtime.error_count == 0
 
 
 @pytest.mark.asyncio
@@ -967,7 +1023,7 @@ async def test_stream_invalid_encrypted_reasoning_without_failover_has_no_cross_
     )
 
     assert response.status_code == 400
-    assert "cross_account_encrypted_reasoning_rejected" not in caplog.text
+    assert "cross_account_encrypted_content_rejected" not in caplog.text
 
 
 @pytest.mark.asyncio

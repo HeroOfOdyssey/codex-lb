@@ -11,7 +11,12 @@
 - [x] 2.1 Exempt classified pre-visible HTTP 429 and first-event failures from
       transient payload-owner registration
 - [x] 2.2 Emit a distinct, ciphertext-free diagnostic when the alternate
-      account rejects encrypted reasoning after classified limit failover
+      account rejects retained encrypted content after classified limit
+      failover
+- [x] 2.3 Restrict owner release to bodies whose sole account-scoped retained
+      state is ciphertext
+- [x] 2.4 Keep encrypted-content request rejections from penalizing the
+      alternate account's health
 
 ## 3. Tests
 
@@ -24,6 +29,10 @@
       ciphertext is forwarded unchanged
 - [x] 3.6 Cover HTTP-status and first-event `invalid_encrypted_content`
       diagnostics plus the no-failover negative control
+- [x] 3.7 Cover reasoning and compaction ciphertext plus literal and observed
+      rejection shapes
+- [x] 3.8 Prove an unresolved `input_file.file_id` remains on the first
+      dispatch account after a coded 429
 
 ## 4. Validation
 
