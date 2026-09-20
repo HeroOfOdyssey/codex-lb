@@ -6862,8 +6862,8 @@ transition.
 - **WHEN** account A returns a classified rate-limit or quota rejection before
   any downstream-visible response event while owner registration is pending
 - **THEN** the proxy does not establish account A as the dispatch owner
-- **AND** normal retry selection may dispatch the exact unchanged ciphertext on
-  account B
+- **AND** the proxy MUST attempt the exact unchanged ciphertext on an eligible
+  account B before returning account A's rejection
 
 #### Scenario: Verified account-neutral fresh replay may change accounts
 

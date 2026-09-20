@@ -1261,7 +1261,7 @@ class _StreamingRetryMixin:
                 status=status,
             )
 
-        def _log_cross_account_encrypted_content_rejection(
+        def _log_cross_account_encrypted_reasoning_rejection(
             *,
             account_id: str,
             exc: BaseException,
@@ -1278,7 +1278,7 @@ class _StreamingRetryMixin:
             upstream_code, _, _ = _stream_failure_details(exc)
             quota_failover_rejection_logged = True
             _facade().logger.warning(
-                "cross_account_encrypted_content_rejected request_id=%s "
+                "cross_account_encrypted_reasoning_rejected request_id=%s "
                 "source_account_id=%s target_account_id=%s "
                 "failover_trigger=previsible_rate_limit_or_quota upstream_code=%s",
                 request_id,
@@ -2417,7 +2417,7 @@ class _StreamingRetryMixin:
                                             ),
                                         ):
                                             payload_replay_required_account_id = account.id
-                                    _log_cross_account_encrypted_content_rejection(
+                                    _log_cross_account_encrypted_reasoning_rejection(
                                         account_id=account.id,
                                         exc=exc,
                                     )

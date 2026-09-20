@@ -8,10 +8,10 @@ currently records the rejected account as the payload owner first. Selection
 then excludes and requires the same account, so the request surfaces the limit
 even when another compatible account has capacity.
 
-This is distinct from the soft prompt-cache affinity theory discussed in Issue
-#1924 and PRs #1964 and #1965. Prompt-cache exclusion already selects a
-replacement on current `main`; the conflict comes from the newly established
-dispatch-owner requirement.
+This is distinct from the soft prompt-cache affinity theory discussed in Issue #1924
+and PRs #1964 and #1965. Prompt-cache exclusion already selects a replacement on
+current `main`; the conflict comes from the newly established dispatch-owner
+requirement.
 
 PR #2069 takes a broader recovery approach by projecting response-owned fields
 out of eligible full-resend transcripts with prior completed assistant output

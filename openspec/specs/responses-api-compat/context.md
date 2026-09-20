@@ -233,7 +233,7 @@ pre-visible failover path rather than treating encrypted input as generally
 portable. If the alternate account returns literal `invalid_encrypted_content`
 or the observed reasoning-decryption rejection shape for retained encrypted
 reasoning or compaction, the proxy writes a dedicated
-`cross_account_encrypted_content_rejected` warning with request,
+`cross_account_encrypted_reasoning_rejected` warning with request,
 source-account, target-account, trigger, and error-code provenance. It never
 logs encrypted content; operators can search this event directly to detect an
 upstream portability change. The request-shaped rejection does not increment

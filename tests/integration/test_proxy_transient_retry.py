@@ -893,7 +893,7 @@ async def test_stream_encrypted_reasoning_429_cross_account_failover_is_unchange
 @pytest.mark.parametrize("encrypted_item_type", ["reasoning", "compaction"])
 @pytest.mark.parametrize("rejection_shape", ["status_observed", "response_failed_observed", "status_literal"])
 @pytest.mark.asyncio
-async def test_stream_cross_account_encrypted_content_rejection_logs_failover_provenance(
+async def test_stream_cross_account_encrypted_reasoning_rejection_logs_failover_provenance(
     async_client, monkeypatch, caplog, encrypted_item_type: str, rejection_shape: str
 ):
     """An upstream portability reversal is attributable to the quota failover that exposed it."""
@@ -967,7 +967,7 @@ async def test_stream_cross_account_encrypted_content_rejection_logs_failover_pr
     records = [
         record
         for record in caplog.records
-        if record.getMessage().startswith("cross_account_encrypted_content_rejected ")
+        if record.getMessage().startswith("cross_account_encrypted_reasoning_rejected ")
     ]
     assert len(records) == 1
     diagnostic = records[0].getMessage()
@@ -1023,7 +1023,7 @@ async def test_stream_invalid_encrypted_reasoning_without_failover_has_no_cross_
     )
 
     assert response.status_code == 400
-    assert "cross_account_encrypted_content_rejected" not in caplog.text
+    assert "cross_account_encrypted_reasoning_rejected" not in caplog.text
 
 
 @pytest.mark.asyncio
