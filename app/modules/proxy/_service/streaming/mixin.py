@@ -493,6 +493,7 @@ class _StreamingMixin(_StreamingRetryMixin):
         tool_call_dedupe: _WebSocketUpstreamControl | None = None,
         enforce_openai_sdk_contract: bool = True,
         thread_cache_identity: ThreadCacheIdentity | None = None,
+        failover_replay: bool = False,
     ) -> AsyncIterator[str]:
         proxy = cast(_StreamingServiceProtocol, self)
         clock = clock_for(proxy)
@@ -539,7 +540,7 @@ class _StreamingMixin(_StreamingRetryMixin):
             if code is None:
                 return
             if api_key_reservation is None:
-                await proxy._handle_stream_error(account, error, code)
+                await proxy._handle_stream_error(account, error, code, failover_replay=failover_replay)
                 return
             settlement.error_code = code
             settlement.account_health_error = True
@@ -715,7 +716,11 @@ class _StreamingMixin(_StreamingRetryMixin):
                         failure_metadata = _RequestLogFailureMetadata(
                             failure_phase="upstream", failure_detail="upstream_eof_before_terminal_event"
                         )
-                    settlement.account_health_error = _facade()._should_penalize_stream_error(code, error_message)
+                    settlement.account_health_error = _facade()._should_penalize_stream_error(
+                        code,
+                        error_message,
+                        failover_replay=failover_replay,
+                    )
                     if allow_retry and code == "stream_idle_timeout":
                         raise _RetryableStreamError(code, upstream_error, exclude_account=True)
                     if allow_retry and _facade()._is_security_work_authorization_required_error(code, error_message):
@@ -889,7 +894,11 @@ class _StreamingMixin(_StreamingRetryMixin):
                                 settlement.account_health_error = not saw_text_delta
                             else:
                                 settlement.account_health_error = (
-                                    _facade()._should_penalize_stream_error(error_code, error_message)
+                                    _facade()._should_penalize_stream_error(
+                                        error_code,
+                                        error_message,
+                                        failover_replay=failover_replay,
+                                    )
                                     and not saw_text_delta
                                 )
                 elif preserve_raw_sse_line:
@@ -985,7 +994,11 @@ class _StreamingMixin(_StreamingRetryMixin):
             )
             error_message = error.message if error else None
             settlement.record_success = False
-            settlement.account_health_error = _facade()._should_penalize_stream_error(error_code, error_message)
+            settlement.account_health_error = _facade()._should_penalize_stream_error(
+                error_code,
+                error_message,
+                failover_replay=failover_replay,
+            )
             raise
         except UpstreamProxyRouteError as exc:
             route_fail_closed_reason = exc.reason

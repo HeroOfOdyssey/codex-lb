@@ -162,11 +162,12 @@ dispatch owner.
   request identifier, source account A, target account B, failover trigger, and
   upstream error code
 - **AND** the diagnostic does not contain encrypted content
-- **AND** the request rejection does not penalize account B's health. This
-  holds for every `invalid_encrypted_content` and every HTTP 400 reasoning-replay
-  rejection regardless of failover provenance: such a rejection reproduces on
-  any account, so the exemption is a global request-rejection rule rather than
-  a provenance-scoped one
+- **AND** the request rejection does not penalize account B's health when the
+  rejection is an `invalid_encrypted_content` or an HTTP 400 reasoning-replay
+  rejection and the request carries that failover provenance (source account A
+  differs from account B). Such a rejection reproduces on any account the
+  ciphertext is replayed onto, so it is account-neutral only for that replay
+  and keeps its health write otherwise
 - **AND** the same rejection without that failover
   provenance does not emit the cross-account diagnostic
 

@@ -90,6 +90,7 @@ from app.modules.proxy._service.streaming import retry as streaming_retry_module
 from app.modules.proxy._service.support import (
     _account_capacity_wait_payload,
     _account_selection_recovery_sleep_seconds,
+    _RetryableStreamError,
     _sleep_for_account_selection_recovery,
 )
 from app.modules.proxy._service.websocket import helpers as websocket_helpers_module
@@ -299,12 +300,12 @@ _REASONING_REPLAY_400_MESSAGE = (
             "This request was blocked by our safety systems.",
             True,
         ),
-        ("invalid_encrypted_content", 400, "Encrypted content is invalid.", True),
-        ("invalid_encrypted_content", None, "Encrypted content is invalid.", True),
+        ("invalid_encrypted_content", 400, "Encrypted content is invalid.", False),
+        ("invalid_encrypted_content", None, "Encrypted content is invalid.", False),
         ("invalid_encrypted_content", 500, "Encrypted content is invalid.", False),
-        ("invalid_request_error", 400, _REASONING_REPLAY_400_MESSAGE, True),
-        ("invalid_request_error", None, _REASONING_REPLAY_400_MESSAGE, True),
-        ("upstream_error", 400, _REASONING_REPLAY_400_MESSAGE, True),
+        ("invalid_request_error", 400, _REASONING_REPLAY_400_MESSAGE, False),
+        ("invalid_request_error", None, _REASONING_REPLAY_400_MESSAGE, False),
+        ("upstream_error", 400, _REASONING_REPLAY_400_MESSAGE, False),
         ("upstream_error", None, _REASONING_REPLAY_400_MESSAGE, False),
         (
             "misalignment_policy_violation",
@@ -361,6 +362,37 @@ def test_is_account_neutral_request_rejection(
             code=code,
             http_status=http_status,
             message=message,
+        )
+        is expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "http_status", "message", "failover_replay", "expected"),
+    [
+        ("invalid_encrypted_content", 400, "Encrypted content is invalid.", True, True),
+        ("invalid_encrypted_content", None, "Encrypted content is invalid.", True, True),
+        ("invalid_encrypted_content", 400, "Encrypted content is invalid.", False, False),
+        ("invalid_request_error", 400, _REASONING_REPLAY_400_MESSAGE, True, True),
+        ("invalid_request_error", None, _REASONING_REPLAY_400_MESSAGE, True, True),
+        ("upstream_error", 400, _REASONING_REPLAY_400_MESSAGE, True, True),
+        ("invalid_request_error", 400, _REASONING_REPLAY_400_MESSAGE, False, False),
+        ("upstream_error", None, _REASONING_REPLAY_400_MESSAGE, True, False),
+    ],
+)
+def test_failover_replay_scopes_account_neutral_rejection(
+    code: str,
+    http_status: int | None,
+    message: str | None,
+    failover_replay: bool,
+    expected: bool,
+) -> None:
+    assert (
+        streaming_helpers_module._is_account_neutral_request_rejection(
+            code=code,
+            http_status=http_status,
+            message=message,
+            failover_replay=failover_replay,
         )
         is expected
     )
@@ -828,6 +860,7 @@ async def test_reasoning_replay_400_increments_counter_without_changing_health(
         {"message": _REASONING_REPLAY_400_MESSAGE},
         "invalid_request_error",
         400,
+        failover_replay=True,
     )
 
     counter.inc.assert_called_once_with()
@@ -836,6 +869,35 @@ async def test_reasoning_replay_400_increments_counter_without_changing_health(
     load_balancer.record_error.assert_not_awaited()
     load_balancer.mark_rate_limit.assert_not_awaited()
     proxy._schedule_cancel_safe_cleanup.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reasoning_replay_400_without_failover_provenance_penalizes_account() -> None:
+    load_balancer = _stream_error_load_balancer()
+    proxy = SimpleNamespace(_load_balancer=load_balancer, _schedule_cancel_safe_cleanup=MagicMock())
+
+    await streaming_helpers_module._handle_stream_error(
+        proxy,
+        cast(Account, SimpleNamespace(id="acc-1")),
+        {"message": _REASONING_REPLAY_400_MESSAGE},
+        "invalid_request_error",
+        400,
+    )
+
+    # Outside a cross-account failover replay the payload is not proven bad on
+    # a source account, so the 400 keeps its account health write.
+    load_balancer.record_error.assert_awaited()
+
+
+def test_code_less_usage_limit_frame_is_decided_by_message_arm() -> None:
+    # Only the message arm can classify this frame: the code ``upstream_error``
+    # is in neither rate-limit nor quota code sets.
+    rejection = _RetryableStreamError(
+        "upstream_error",
+        cast(UpstreamError, {"message": "You've hit your usage limit."}),
+    )
+
+    assert streaming_retry_module._failure_is_rate_limit_or_quota_rejection(rejection) is True
 
 
 @pytest.mark.parametrize(
@@ -17319,6 +17381,7 @@ async def test_stream_with_retry_post_refresh_transient_exhaustion_fails_over(
         error: UpstreamError,
         code: str,
         http_status: int | None = None,
+        **_kwargs: object,
     ) -> object:
         settlement_order.append(f"health:{code}")
         return await original_handle_stream_error(account, error, code, http_status=http_status)

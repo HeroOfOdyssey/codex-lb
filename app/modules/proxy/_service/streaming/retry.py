@@ -588,6 +588,16 @@ class _StreamingRetryMixin:
         file_preferred_account_id: str | None = rewritten_file_account_id
         require_preferred_account = False
         last_retryable_stream_error: _RetryableStreamError | None = None
+
+        def _failover_replay_for(account_id: str) -> bool:
+            """Whether this request replays a quota-failover payload onto ``account_id``.
+
+            The source account proved the encrypted-only payload bad before its
+            quota rejection; any other account is replaying that same payload, so
+            an encrypted-content or reasoning-replay 400 there is account-neutral.
+            """
+            return quota_failover_source_account_id is not None and quota_failover_source_account_id != account_id
+
         # (account, error, code, http_status, retry_count, retry_after_seconds,
         #  burst_cooldown_recorded): a queued keyed health write. The burst
         # cooldown is replica-local runtime state with no reservation-ordering
@@ -676,6 +686,7 @@ class _StreamingRetryMixin:
                             error_payload,
                             error_code,
                             http_status=http_status,
+                            failover_replay=_failover_replay_for(account.id),
                             **_retry_after_kwargs(retry_after_seconds),
                             **({"burst_cooldown_recorded": True} if burst_cooldown_recorded else {}),
                         )
@@ -814,6 +825,7 @@ class _StreamingRetryMixin:
                 failed_error,
                 failed_code,
                 http_status=http_status,
+                failover_replay=_failover_replay_for(failed_account.id),
                 **_retry_after_kwargs(retry_after_seconds),
             )
             if transient_retry_count > 1:
@@ -910,6 +922,7 @@ class _StreamingRetryMixin:
                         account,
                         _stream_settlement_error_payload(current_settlement),
                         current_settlement.error_code or "upstream_error",
+                        failover_replay=_failover_replay_for(account.id),
                         upstream_http_status=upstream_http_status,
                     )
                 elif current_settlement.record_success:
@@ -1031,6 +1044,7 @@ class _StreamingRetryMixin:
                     request_id,
                     False,
                     request_started_at=start,
+                    failover_replay=_failover_replay_for(account.id),
                     affinity_observation=affinity_observation,
                     allow_transient_retry=True,
                     api_key=api_key,
@@ -1170,7 +1184,11 @@ class _StreamingRetryMixin:
                     settlement.error_message = error_message
                     settlement.error = exc.error
                     settlement.account_health_error = (
-                        _facade()._should_penalize_stream_error(exc.code, error_message)
+                        _facade()._should_penalize_stream_error(
+                            exc.code,
+                            error_message,
+                            failover_replay=_failover_replay_for(account.id),
+                        )
                         or is_upstream_model_capacity_error(error_message)
                         or exc.account_health_error
                     )
@@ -2365,6 +2383,7 @@ class _StreamingRetryMixin:
                                 request_id,
                                 allow_retry_flag,
                                 request_started_at=start,
+                                failover_replay=_failover_replay_for(account.id),
                                 affinity_observation=affinity_observation,
                                 allow_transient_retry=(
                                     transient_retries < _facade()._MAX_TRANSIENT_SAME_ACCOUNT_RETRIES - 1
@@ -2521,7 +2540,9 @@ class _StreamingRetryMixin:
                                 else:
                                     settlement.error = tex.error
                                 settlement.account_health_error = _facade()._should_penalize_stream_error(
-                                    error_code, error_message
+                                    error_code,
+                                    error_message,
+                                    failover_replay=_failover_replay_for(account.id),
                                 )
                                 transient_upstream_http_status = (
                                     tex.status_code if isinstance(tex, ProxyResponseError) else None
@@ -2545,6 +2566,7 @@ class _StreamingRetryMixin:
                                         account,
                                         _stream_settlement_error_payload(settlement),
                                         settlement.error_code or "upstream_error",
+                                        failover_replay=_failover_replay_for(account.id),
                                         # Evidence only. ``_TransientStreamError``
                                         # carries no status, which is correct:
                                         # those are the genuinely status-less
@@ -2840,6 +2862,7 @@ class _StreamingRetryMixin:
                                         _upstream_error_from_openai(error),
                                         code,
                                         http_status=tex.status_code,
+                                        failover_replay=_failover_replay_for(account.id),
                                         **_retry_after_kwargs(tex.retry_after_seconds),
                                     )
                                 setattr(tex, _STREAM_HEALTH_RECORDED_ATTR, True)
@@ -2934,6 +2957,7 @@ class _StreamingRetryMixin:
                                     account,
                                     _stream_settlement_error_payload(settlement),
                                     settlement.error_code or "upstream_error",
+                                    failover_replay=_failover_replay_for(account.id),
                                 )
                             elif settled and settlement.record_success:
                                 await proxy._load_balancer.record_success(account)
@@ -3002,6 +3026,7 @@ class _StreamingRetryMixin:
                                 account,
                                 _stream_settlement_error_payload(settlement),
                                 settlement.error_code or "upstream_error",
+                                failover_replay=_failover_replay_for(account.id),
                             )
                     return
                 except ProxyResponseError as exc:
@@ -3337,7 +3362,9 @@ class _StreamingRetryMixin:
                                 settlement.error_message = error_message
                                 settlement.error = _upstream_error_from_openai(error)
                                 settlement.account_health_error = _facade()._should_penalize_stream_error(
-                                    error_code, error_message
+                                    error_code,
+                                    error_message,
+                                    failover_replay=_failover_replay_for(account.id),
                                 )
                                 settled = await _settle_stream_usage_before_pending_penalty(settlement)
                                 if settled and settlement.account_health_error:
@@ -3345,6 +3372,7 @@ class _StreamingRetryMixin:
                                         account,
                                         _stream_settlement_error_payload(settlement),
                                         settlement.error_code or "upstream_error",
+                                        failover_replay=_failover_replay_for(account.id),
                                         http_status=retry_exc.status_code,
                                     )
                                 return
@@ -3564,6 +3592,7 @@ class _StreamingRetryMixin:
                                     current_error_payload,
                                     current_error_code,
                                     http_status=retry_exc.status_code,
+                                    failover_replay=_failover_replay_for(account.id),
                                     **_retry_after_kwargs(retry_exc.retry_after_seconds),
                                 )
                                 setattr(retry_exc, _STREAM_HEALTH_RECORDED_ATTR, True)
@@ -3600,6 +3629,7 @@ class _StreamingRetryMixin:
                                     account,
                                     _stream_settlement_error_payload(settlement),
                                     settlement.error_code or "upstream_error",
+                                    failover_replay=_failover_replay_for(account.id),
                                 )
                             elif health_write_allowed and settlement.record_success:
                                 await proxy._load_balancer.record_success(account)
@@ -3647,12 +3677,17 @@ class _StreamingRetryMixin:
                     if (
                         health_write_allowed
                         and not getattr(exc, _STREAM_HEALTH_RECORDED_ATTR, False)
-                        and _facade()._should_penalize_stream_error(error_code, error_message)
+                        and _facade()._should_penalize_stream_error(
+                            error_code,
+                            error_message,
+                            failover_replay=_failover_replay_for(account.id),
+                        )
                     ):
                         await proxy._handle_stream_error(
                             account,
                             _upstream_error_from_openai(error),
                             error_code,
+                            failover_replay=_failover_replay_for(account.id),
                             # Evidence only: this failure carries an upstream
                             # HTTP status, so it is not a status-less terminal
                             # and must stay out of the soft-overload window.

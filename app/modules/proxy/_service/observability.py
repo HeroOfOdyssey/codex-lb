@@ -83,8 +83,9 @@ def _is_reasoning_replay_rejection(
     where a forked thread replays reasoning ciphertext minted for another
     account; that case is undetectable from ids. The same predicate also
     exempts the rejection from account-health penalties in
-    ``_is_account_neutral_request_rejection``, so a match here is an
-    account-neutral request rejection, not an account fault. Without an HTTP
+    ``_is_account_neutral_request_rejection`` only for a failover replay
+    (``failover_replay``), so a match here is an account-neutral request
+    rejection, not an account fault, on that replay. Without an HTTP
     status (terminal ``error`` / ``response.failed`` frames) only the
     ``invalid_request_error`` code qualifies.
     """
