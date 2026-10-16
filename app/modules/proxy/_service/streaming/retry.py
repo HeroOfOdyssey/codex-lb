@@ -110,6 +110,7 @@ from app.modules.proxy.helpers import (
     classify_upstream_failure,
     is_upstream_burst_rejection,
     is_upstream_model_capacity_error,
+    is_upstream_usage_limit_rejection,
 )
 from app.modules.proxy.http_continuation import http_continuation_signal
 from app.modules.proxy.load_balancer import AccountLease, AccountSelection
@@ -148,12 +149,17 @@ _INVALID_ENCRYPTED_CONTENT_CODE = "invalid_encrypted_content"
 def _failure_is_rate_limit_or_quota_rejection(exc: BaseException) -> bool:
     """Return whether a pre-visible failure definitively rejected the selected account."""
     if isinstance(exc, _RetryableStreamError):
-        return exc.code in (_RATE_LIMIT_CODES | _QUOTA_CODES)
+        return exc.code in (_RATE_LIMIT_CODES | _QUOTA_CODES) or is_upstream_usage_limit_rejection(
+            error_code=exc.code, message=exc.error.get("message")
+        )
     if not isinstance(exc, ProxyResponseError) or exc.status_code != 429:
         return False
     error = _parse_openai_error(exc.payload)
     code = _normalize_error_code(error.code if error else None, error.type if error else None)
-    return code in (_RATE_LIMIT_CODES | _QUOTA_CODES)
+    message = error.message if error else None
+    return code in (_RATE_LIMIT_CODES | _QUOTA_CODES) or is_upstream_usage_limit_rejection(
+        error_code=code, message=message
+    )
 
 
 def _failure_allows_payload_owner_reselection(
@@ -577,7 +583,7 @@ class _StreamingRetryMixin:
         quota_failover_source_account_id: str | None = None
         quota_failover_rejection_logged = False
         payload_has_only_encrypted_account_scoped_state = responses_payload_has_only_encrypted_account_scoped_state(
-            payload.model_dump(mode="json", exclude_none=True)
+            payload.to_replay_safety_payload()
         )
         file_preferred_account_id: str | None = rewritten_file_account_id
         require_preferred_account = False

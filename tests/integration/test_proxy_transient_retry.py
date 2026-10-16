@@ -380,7 +380,7 @@ _USAGE_LIMIT_FRAME_ERRORS = (
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("frame_error", _USAGE_LIMIT_FRAME_ERRORS[:2])
+@pytest.mark.parametrize("frame_error", _USAGE_LIMIT_FRAME_ERRORS)
 async def test_stream_serialized_usage_limit_frame_without_a_code_walks_the_pool(
     async_client, monkeypatch, frame_error
 ):
@@ -973,7 +973,8 @@ async def test_compact_deactivated_workspace_fails_over_once(async_client, monke
 
 
 @pytest.mark.asyncio
-async def test_stream_connect_phase_429_usage_limit_transparent_failover(async_client, monkeypatch):
+@pytest.mark.parametrize("frame_error", _USAGE_LIMIT_FRAME_ERRORS)
+async def test_stream_connect_phase_429_usage_limit_transparent_failover(async_client, monkeypatch, frame_error):
     """Connect-phase 429/usage_limit_reached on A should fail over to B before any downstream event."""
     account_a_id = await _import_account(async_client, "acc_stream_429_a", "stream429a@example.com")
     await _import_account(async_client, "acc_stream_429_b", "stream429b@example.com")
@@ -985,7 +986,7 @@ async def test_stream_connect_phase_429_usage_limit_transparent_failover(async_c
         if account_id == "acc_stream_429_a":
             raise ProxyResponseError(
                 429,
-                openai_error("usage_limit_reached", "usage limit reached"),
+                {"error": frame_error},
                 failure_phase="status",
             )
         yield _success_sse_event("resp_stream_429_ok")
@@ -1011,7 +1012,8 @@ async def test_stream_connect_phase_429_usage_limit_transparent_failover(async_c
 
 
 @pytest.mark.asyncio
-async def test_stream_compacted_input_429_usage_limit_transparent_failover(async_client, monkeypatch):
+@pytest.mark.parametrize("frame_error", _USAGE_LIMIT_FRAME_ERRORS)
+async def test_stream_compacted_input_429_usage_limit_transparent_failover(async_client, monkeypatch, frame_error):
     """A pre-visible 429 must not bind retained input to the rejected account."""
     await _import_account(async_client, "acc_stream_compact_429_a", "streamcompact429a@example.com")
     await _import_account(async_client, "acc_stream_compact_429_b", "streamcompact429b@example.com")
@@ -1026,7 +1028,7 @@ async def test_stream_compacted_input_429_usage_limit_transparent_failover(async
             rejected_account_id = account_id
             raise ProxyResponseError(
                 429,
-                openai_error("usage_limit_reached", "usage limit reached"),
+                {"error": frame_error},
                 failure_phase="status",
             )
         assert account_id != rejected_account_id

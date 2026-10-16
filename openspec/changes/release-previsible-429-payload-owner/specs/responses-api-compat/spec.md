@@ -143,7 +143,8 @@ dispatch owner.
 - **AND** the body has no independently established required account owner
 - **AND** account B is eligible and the request retry budget remains
 - **WHEN** account A's first upstream event is `response.failed` with a code
-  classified as rate-limit or quota
+  classified as rate-limit or quota, or with no code and a message that
+  upstream classifies as a usage-limit rejection
 - **THEN** the proxy does not expose that event or record account A as the
   dispatch owner
 - **AND** the proxy MUST attempt dispatch on account B
@@ -161,7 +162,11 @@ dispatch owner.
   request identifier, source account A, target account B, failover trigger, and
   upstream error code
 - **AND** the diagnostic does not contain encrypted content
-- **AND** the request rejection does not penalize account B's health
+- **AND** the request rejection does not penalize account B's health. This
+  holds for every `invalid_encrypted_content` and every HTTP 400 reasoning-replay
+  rejection regardless of failover provenance: such a rejection reproduces on
+  any account, so the exemption is a global request-rejection rule rather than
+  a provenance-scoped one
 - **AND** the same rejection without that failover
   provenance does not emit the cross-account diagnostic
 

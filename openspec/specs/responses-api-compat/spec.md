@@ -6983,7 +6983,8 @@ dispatch owner.
 - **AND** the body has no independently established required account owner
 - **AND** account B is eligible and the request retry budget remains
 - **WHEN** account A's first upstream event is `response.failed` with a code
-  classified as rate-limit or quota
+  classified as rate-limit or quota, or with no code and a message that
+  upstream classifies as a usage-limit rejection
 - **THEN** the proxy does not expose that event or record account A as the
   dispatch owner
 - **AND** the proxy MUST attempt dispatch on account B
