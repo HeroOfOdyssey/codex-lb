@@ -33,6 +33,8 @@
       rejection shapes
 - [x] 3.8 Prove an unresolved `input_file.file_id` remains on the first
       dispatch account after a coded 429
+- [x] 3.9 Cover both code-less usage-limit messages and the coded form in the
+      compacted-input first-event failover regression
 
 ## 4. Validation
 

@@ -1287,7 +1287,10 @@ async def test_stream_invalid_encrypted_reasoning_without_failover_has_no_cross_
 
 
 @pytest.mark.asyncio
-async def test_stream_compacted_input_first_event_usage_limit_transparent_failover(async_client, monkeypatch):
+@pytest.mark.parametrize("frame_error", _USAGE_LIMIT_FRAME_ERRORS)
+async def test_stream_compacted_input_first_event_usage_limit_transparent_failover(
+    async_client, monkeypatch, frame_error
+):
     """A first-event quota rejection must not bind retained input to the rejected account."""
     await _import_account(async_client, "acc_stream_event_limit_a", "streameventlimita@example.com")
     await _import_account(async_client, "acc_stream_event_limit_b", "streameventlimitb@example.com")
@@ -1304,10 +1307,7 @@ async def test_stream_compacted_input_first_event_usage_limit_transparent_failov
                 {
                     "type": "response.failed",
                     "response": {
-                        "error": {
-                            "code": "usage_limit_reached",
-                            "message": "usage limit reached",
-                        },
+                        "error": frame_error,
                     },
                 }
             )
